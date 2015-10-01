@@ -18,13 +18,81 @@
 import re
 
 class Condition:
-    def __init__(self, typez, params):
-        self.type = typez         # eq, regex, lt, gt etc.
+    def __init__(self, t, params):
         if type(params) == type(str()):
             params = (params,)
-        self.params = params      # e.g. ('highway','primary')
-        if typez == "regex":
+        self.type = t # eq, regex, lt, gt etc.
+        self.params = params # e.g. ('highway','primary')
+        self.callable = self.method_dummy
+        if t == 'eq':
+            if self.params[0][:2] == "::":
+                self.callable = self.method_class
+            else:
+                self.callable = self.method_eq
+        elif t == 'ne':
+            self.callable = self.method_ne
+        elif t == 'regex':
             self.regex = re.compile(self.params[0], re.I)
+            self.callable = self.method_regex
+        elif t == 'true':
+            self.callable = self.method_true
+        elif t == 'untrue':
+            self.callable = self.method_untrue
+        elif t == 'set':
+            self.callable = self.method_set
+        elif t == 'unset':
+            self.callable = self.method_unset
+        elif t == '<':
+            self.callable = self.method_less
+        elif t == '<=':
+            self.callable = self.method_less_or_eq
+        elif t == '>':
+            self.callable = self.method_greater
+        elif t == '>=':
+            self.callable = self.method_greater_or_eq
+
+    def method_dummy(self, tags):
+        return False
+
+    def method_class(self, tags):
+        return self.params[1]
+
+    def method_eq(self, tags):
+        return tags[self.params[0]] == self.params[1]
+
+    def method_ne(self, tags):
+        return tags.get(self.params[0], "") != self.params[1]
+
+    def method_regex(self, tags):
+        return bool(self.regex.match(tags[self.params[0]]))
+
+    def method_true(self, tags):
+        return tags.get(self.params[0]) == 'yes'
+
+    def method_untrue(self, tags):
+        return tags.get(self.params[0]) == 'no'
+
+    def method_set(self, tags):
+        if self.params[0] in tags:
+            return tags[self.params[0]] != ''
+        return False
+
+    def method_unset(self, tags):
+        if self.params[0] in tags:
+            return tags[self.params[0]] == ''
+        return True
+
+    def method_less(self, tags):
+        return (Number(tags[self.params[0]]) < Number(self.params[1]))
+
+    def method_less_or_eq(self, tags):
+        return (Number(tags[self.params[0]]) <= Number(self.params[1]))
+
+    def method_greater(self, tags):
+        return (Number(tags[self.params[0]]) > Number(self.params[1]))
+
+    def method_greater_or_eq(self, tags):
+        return (Number(tags[self.params[0]]) >= Number(self.params[1]))
 
     def extract_tag(self):
         if self.params[0][:2] == "::" or self.type == "regex":
@@ -35,38 +103,8 @@ class Condition:
         """
         Test a hash against this condition
         """
-        t = self.type
-        params = self.params
-        if t == 'eq':   # don't compare tags against sublayers
-            if params[0][:2] == "::":
-                return params[1]
         try:
-            if t == 'eq':
-                return tags[params[0]] == params[1]
-            if t == 'ne':
-                return tags.get(params[0], "") != params[1]
-            if t == 'regex':
-                return bool(self.regex.match(tags[params[0]]))
-            if t == 'true':
-                return tags.get(params[0]) == 'yes'
-            if t == 'untrue':
-                return tags.get(params[0]) == 'no'
-            if t == 'set':
-                if params[0] in tags:
-                    return tags[params[0]] != ''
-                return False
-            if t == 'unset':
-                if params[0] in tags:
-                    return tags[params[0]] == ''
-                return True
-            if t == '<':
-                return (Number(tags[params[0]]) < Number(params[1]))
-            if t == '<=':
-                return (Number(tags[params[0]]) <= Number(params[1]))
-            if t == '>':
-                return (Number(tags[params[0]]) > Number(params[1]))
-            if t == '>=':
-                return (Number(tags[params[0]]) >= Number(params[1]))
+            return self.callable(tags)
         except KeyError:
             pass
         return False
@@ -81,7 +119,7 @@ class Condition:
         if t == 'ne':
             return "%s=%s" % (params[0], params[1])
         if t == 'regex':
-            return "%s=~/%s/" % (params[0], params[1]);
+            return "%s=~/%s/" % (params[0], params[1])
         if t == 'true':
             return "%s?" % (params[0])
         if t == 'untrue':
