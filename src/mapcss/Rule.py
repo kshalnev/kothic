@@ -15,33 +15,38 @@
 #   You should have received a copy of the GNU General Public License
 #   along with kothic.  If not, see <http://www.gnu.org/licenses/>.
 
-type_matches = {
-    "": ('area', 'line', 'way', 'node'),
+TYPE_MATCHES = {
+    "": ("area", "line", "way", "node"),
     "area": ("area", "way"),
     "node": ("node",),
     "way": ("line", "area", "way"),
-    "line": ("line", "area"),
+    "line": ("line", "area")
     }
 
-class Rule():
+class Rule:
     def __init__(self, s=''):
         self.runtime_conditions = []
         self.conditions = []
-        # self.isAnd = True
         self.minZoom = 0
         self.maxZoom = 19
         if s == "*":
             s = ""
-        self.subject = s    # "", "way", "node" or "relation"
+        self.subject = s # "", "node", "line", "way", "area" or "relation"
 
     def __repr__(self):
         return "%s|z%s-%s %s %s" % (self.subject, self.minZoom, self.maxZoom, self.conditions, self.runtime_conditions)
 
     def test(self, obj, tags, zoom):
-        if (zoom < self.minZoom) or (zoom > self.maxZoom):
+        """
+        obj - string, subject "node", "way", "line" or "area"
+        tag - map<string,string>, tags from the classificator
+        zoom - int, zoom level
+        returns False (if rule does not match) or "::default" (it it is not a class) or class name, if rule matches
+        """
+        if zoom < self.minZoom or zoom > self.maxZoom:
             return False
 
-        if (self.subject != '') and not _test_feature_compatibility(obj, self.subject, tags):
+        if self.subject != "" and not self.test_feature_compatibility(obj):
             return False
 
         subpart = "::default"
@@ -51,10 +56,11 @@ class Rule():
                 return False
             if type(res) != bool:
                 subpart = res
+
         return subpart
 
     def get_compatible_types(self):
-        return type_matches.get(self.subject, (self.subject,))
+        return TYPE_MATCHES.get(self.subject, (self.subject, ))
 
     def extract_tags(self):
         a = set()
@@ -65,27 +71,22 @@ class Rule():
                 break
         return a
 
-
-def _test_feature_compatibility(f1, f2, tags={}):
-    """
-    Checks if feature of type f1 is compatible with f2.
-    """
-    if f2 == f1:
+    def test_feature_compatibility(self, obj):
+        """
+        Checks if feature type is compatible
+        """
+        if self.subject == obj:
+            return True
+        if self.subject not in ("way", "area", "line"):
+            return False
+        elif self.subject == "way" and obj == "line":
+            return True
+        elif self.subject == "way" and obj == "area":
+            return True
+        elif self.subject == "area" and obj in ("way", "area"):
+            return True
+        elif self.subject == "line" and obj in ("way", "line", "area"):
+            return True
+        else:
+            return False
         return True
-    if f2 not in ("way", "area", "line"):
-        return False
-    elif f2 == "way" and f1 == "line":
-        return True
-    elif f2 == "way" and f1 == "area":
-        return True
-    elif f2 == "area" and f1 in ("way", "area"):
-#      if ":area" in tags:
-        return True
-#      else:
-#        return False
-    elif f2 == "line" and f1 in ("way", "line", "area"):
-        return True
-    else:
-        return False
-    # print f1, f2, True
-    return True
